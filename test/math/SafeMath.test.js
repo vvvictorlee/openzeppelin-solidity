@@ -1,91 +1,147 @@
-import assertJump from '../helpers/assertJump';
-const BigNumber = web3.BigNumber;
-const SafeMathMock = artifacts.require('SafeMathMock');
+const { contract } = require('@openzeppelin/test-environment');
+const { BN, constants, expectRevert } = require('@openzeppelin/test-helpers');
+const { MAX_UINT256 } = constants;
 
-require('chai')
-  .use(require('chai-bignumber')(BigNumber))
-  .should();
+const { expect } = require('chai');
 
-contract('SafeMath', () => {
-  const MAX_UINT = new BigNumber('115792089237316195423570985008687907853269984665640564039457584007913129639935');
+const SafeMathMock = contract.fromArtifact('SafeMathMock');
 
-  before(async function () {
+describe('SafeMath', function () {
+  beforeEach(async function () {
     this.safeMath = await SafeMathMock.new();
   });
 
+  async function testCommutative (fn, lhs, rhs, expected) {
+    expect(await fn(lhs, rhs)).to.be.bignumber.equal(expected);
+    expect(await fn(rhs, lhs)).to.be.bignumber.equal(expected);
+  }
+
+  async function testFailsCommutative (fn, lhs, rhs, reason) {
+    await expectRevert(fn(lhs, rhs), reason);
+    await expectRevert(fn(rhs, lhs), reason);
+  }
+
   describe('add', function () {
     it('adds correctly', async function () {
-      const a = new BigNumber(5678);
-      const b = new BigNumber(1234);
+      const a = new BN('5678');
+      const b = new BN('1234');
 
-      const result = await this.safeMath.add(a, b);
-      result.should.be.bignumber.equal(a.plus(b));
+      await testCommutative(this.safeMath.add, a, b, a.add(b));
     });
 
-    it('throws an error on addition overflow', async function () {
-      const a = MAX_UINT;
-      const b = new BigNumber(1);
+    it('reverts on addition overflow', async function () {
+      const a = MAX_UINT256;
+      const b = new BN('1');
 
-      await assertJump(this.safeMath.add(a, b));
+      await testFailsCommutative(this.safeMath.add, a, b, 'SafeMath: addition overflow');
     });
   });
 
   describe('sub', function () {
     it('subtracts correctly', async function () {
-      const a = new BigNumber(5678);
-      const b = new BigNumber(1234);
+      const a = new BN('5678');
+      const b = new BN('1234');
 
-      const result = await this.safeMath.sub(a, b);
-      result.should.be.bignumber.equal(a.minus(b));
+      expect(await this.safeMath.sub(a, b)).to.be.bignumber.equal(a.sub(b));
     });
 
-    it('throws an error if subtraction result would be negative', async function () {
-      const a = new BigNumber(1234);
-      const b = new BigNumber(5678);
+    it('reverts if subtraction result would be negative', async function () {
+      const a = new BN('1234');
+      const b = new BN('5678');
 
-      await assertJump(this.safeMath.sub(a, b));
+      await expectRevert(this.safeMath.sub(a, b), 'SafeMath: subtraction overflow');
     });
   });
 
   describe('mul', function () {
     it('multiplies correctly', async function () {
-      const a = new BigNumber(1234);
-      const b = new BigNumber(5678);
+      const a = new BN('1234');
+      const b = new BN('5678');
 
-      const result = await this.safeMath.mul(a, b);
-      result.should.be.bignumber.equal(a.times(b));
+      await testCommutative(this.safeMath.mul, a, b, a.mul(b));
     });
 
-    it('handles a zero product correctly', async function () {
-      const a = new BigNumber(0);
-      const b = new BigNumber(5678);
+    it('multiplies by zero correctly', async function () {
+      const a = new BN('0');
+      const b = new BN('5678');
 
-      const result = await this.safeMath.mul(a, b);
-      result.should.be.bignumber.equal(a.times(b));
+      await testCommutative(this.safeMath.mul, a, b, '0');
     });
 
-    it('throws an error on multiplication overflow', async function () {
-      const a = MAX_UINT;
-      const b = new BigNumber(2);
+    it('reverts on multiplication overflow', async function () {
+      const a = MAX_UINT256;
+      const b = new BN('2');
 
-      await assertJump(this.safeMath.mul(a, b));
+      await testFailsCommutative(this.safeMath.mul, a, b, 'SafeMath: multiplication overflow');
     });
   });
 
   describe('div', function () {
     it('divides correctly', async function () {
-      const a = new BigNumber(5678);
-      const b = new BigNumber(5678);
+      const a = new BN('5678');
+      const b = new BN('5678');
 
-      const result = await this.safeMath.div(a, b);
-      result.should.be.bignumber.equal(a.div(b));
+      expect(await this.safeMath.div(a, b)).to.be.bignumber.equal(a.div(b));
     });
 
-    it('throws an error on zero division', async function () {
-      const a = new BigNumber(5678);
-      const b = new BigNumber(0);
+    it('divides zero correctly', async function () {
+      const a = new BN('0');
+      const b = new BN('5678');
 
-      await assertJump(this.safeMath.div(a, b));
+      expect(await this.safeMath.div(a, b)).to.be.bignumber.equal('0');
+    });
+
+    it('returns complete number result on non-even division', async function () {
+      const a = new BN('7000');
+      const b = new BN('5678');
+
+      expect(await this.safeMath.div(a, b)).to.be.bignumber.equal('1');
+    });
+
+    it('reverts on division by zero', async function () {
+      const a = new BN('5678');
+      const b = new BN('0');
+
+      await expectRevert(this.safeMath.div(a, b), 'SafeMath: division by zero');
+    });
+  });
+
+  describe('mod', function () {
+    describe('modulos correctly', async function () {
+      it('when the dividend is smaller than the divisor', async function () {
+        const a = new BN('284');
+        const b = new BN('5678');
+
+        expect(await this.safeMath.mod(a, b)).to.be.bignumber.equal(a.mod(b));
+      });
+
+      it('when the dividend is equal to the divisor', async function () {
+        const a = new BN('5678');
+        const b = new BN('5678');
+
+        expect(await this.safeMath.mod(a, b)).to.be.bignumber.equal(a.mod(b));
+      });
+
+      it('when the dividend is larger than the divisor', async function () {
+        const a = new BN('7000');
+        const b = new BN('5678');
+
+        expect(await this.safeMath.mod(a, b)).to.be.bignumber.equal(a.mod(b));
+      });
+
+      it('when the dividend is a multiple of the divisor', async function () {
+        const a = new BN('17034'); // 17034 == 5678 * 3
+        const b = new BN('5678');
+
+        expect(await this.safeMath.mod(a, b)).to.be.bignumber.equal(a.mod(b));
+      });
+    });
+
+    it('reverts with a 0 divisor', async function () {
+      const a = new BN('5678');
+      const b = new BN('0');
+
+      await expectRevert(this.safeMath.mod(a, b), 'SafeMath: modulo by zero');
     });
   });
 });

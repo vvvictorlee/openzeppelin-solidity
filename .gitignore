@@ -32,8 +32,21 @@ npm-debug.log
 # truffle build directory
 build/
 
-# lol macs
-.DS_Store/
+# macOS
+.DS_Store
 
 # truffle
 .node-xmlhttprequest-*
+
+# IntelliJ IDE
+.idea
+
+# docs artifacts
+docs/modules/api
+
+# only used to package @openzeppelin/contracts
+contracts/build/
+contracts/README.md
+
+# temporary artifact from solidity-coverage
+allFiredEvents

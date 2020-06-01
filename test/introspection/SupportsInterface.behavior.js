@@ -1,10 +1,12 @@
-import makeInterfaceId from '../helpers/makeInterfaceId';
+const { makeInterfaceId } = require('@openzeppelin/test-helpers');
 
-const INTERFACE_IDS = {
-  ERC165: makeInterfaceId([
+const { expect } = require('chai');
+
+const INTERFACES = {
+  ERC165: [
     'supportsInterface(bytes4)',
-  ]),
-  ERC721: makeInterfaceId([
+  ],
+  ERC721: [
     'balanceOf(address)',
     'ownerOf(uint256)',
     'approve(address,uint256)',
@@ -14,41 +16,69 @@ const INTERFACE_IDS = {
     'transferFrom(address,address,uint256)',
     'safeTransferFrom(address,address,uint256)',
     'safeTransferFrom(address,address,uint256,bytes)',
-  ]),
-  ERC721Enumerable: makeInterfaceId([
+  ],
+  ERC721Enumerable: [
     'totalSupply()',
     'tokenOfOwnerByIndex(address,uint256)',
     'tokenByIndex(uint256)',
-  ]),
-  ERC721Metadata: makeInterfaceId([
+  ],
+  ERC721Metadata: [
     'name()',
     'symbol()',
     'tokenURI(uint256)',
-  ]),
-  ERC721Exists: makeInterfaceId([
-    'exists(uint256)',
-  ]),
+  ],
+  ERC1155: [
+    'balanceOf(address,uint256)',
+    'balanceOfBatch(address[],uint256[])',
+    'setApprovalForAll(address,bool)',
+    'isApprovedForAll(address,address)',
+    'safeTransferFrom(address,address,uint256,uint256,bytes)',
+    'safeBatchTransferFrom(address,address,uint256[],uint256[],bytes)',
+  ],
 };
 
-export default function (interfaces = []) {
-  describe('ERC165\'s supportsInterface(bytes4)', function () {
+const INTERFACE_IDS = {};
+const FN_SIGNATURES = {};
+for (const k of Object.getOwnPropertyNames(INTERFACES)) {
+  INTERFACE_IDS[k] = makeInterfaceId.ERC165(INTERFACES[k]);
+  for (const fnName of INTERFACES[k]) {
+    // the interface id of a single function is equivalent to its function signature
+    FN_SIGNATURES[fnName] = makeInterfaceId.ERC165([fnName]);
+  }
+}
+
+function shouldSupportInterfaces (interfaces = []) {
+  describe('Contract interface', function () {
     beforeEach(function () {
-      this.thing = this.mock || this.token;
+      this.contractUnderTest = this.mock || this.token;
     });
 
-    for (let k of interfaces) {
+    for (const k of interfaces) {
       const interfaceId = INTERFACE_IDS[k];
       describe(k, function () {
-        it('should use less than 30k gas', async function () {
-          const gasEstimate = await this.thing.supportsInterface.estimateGas(interfaceId);
-          gasEstimate.should.be.lte(30000);
+        describe('ERC165\'s supportsInterface(bytes4)', function () {
+          it('should use less than 30k gas', async function () {
+            expect(await this.contractUnderTest.supportsInterface.estimateGas(interfaceId)).to.be.lte(30000);
+          });
+
+          it('should claim support', async function () {
+            expect(await this.contractUnderTest.supportsInterface(interfaceId)).to.equal(true);
+          });
         });
 
-        it('is supported', async function () {
-          const isSupported = await this.thing.supportsInterface(interfaceId);
-          isSupported.should.eq(true);
-        });
+        for (const fnName of INTERFACES[k]) {
+          const fnSig = FN_SIGNATURES[fnName];
+          describe(fnName, function () {
+            it('should be implemented', function () {
+              expect(this.contractUnderTest.abi.filter(fn => fn.signature === fnSig).length).to.equal(1);
+            });
+          });
+        }
       });
     }
   });
 }
+
+module.exports = {
+  shouldSupportInterfaces,
+};

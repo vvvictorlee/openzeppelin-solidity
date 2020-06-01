@@ -1,11 +1,12 @@
-pragma solidity ^0.4.24;
+// SPDX-License-Identifier: MIT
 
+pragma solidity ^0.6.0;
 
-contract ReentrancyAttack {
-
-  function callSender(bytes4 data) public {
-    // solium-disable-next-line security/no-low-level-calls
-    require(msg.sender.call(abi.encodeWithSelector(data)));
-  }
-
+import "../GSN/Context.sol";
+contract ReentrancyAttack is Context {
+    function callSender(bytes4 data) public {
+        // solhint-disable-next-line avoid-low-level-calls
+        (bool success,) = _msgSender().call(abi.encodeWithSelector(data));
+        require(success, "ReentrancyAttack: failed call");
+    }
 }
