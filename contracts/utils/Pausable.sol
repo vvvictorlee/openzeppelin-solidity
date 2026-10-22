@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts (last updated v5.3.0) (utils/Pausable.sol)
 
-pragma solidity ^0.6.0;
+pragma solidity ^0.8.20;
 
-import "../GSN/Context.sol";
+import {Context} from "./Context.sol";
 
 /**
  * @dev Contract module which allows children to implement an emergency stop
@@ -13,7 +14,9 @@ import "../GSN/Context.sol";
  * the functions of your contract. Note that they will not be pausable by
  * simply including this module, only once the modifiers are put in place.
  */
-contract Pausable is Context {
+abstract contract Pausable is Context {
+    bool private _paused;
+
     /**
      * @dev Emitted when the pause is triggered by `account`.
      */
@@ -24,21 +27,15 @@ contract Pausable is Context {
      */
     event Unpaused(address account);
 
-    bool private _paused;
+    /**
+     * @dev The operation failed because the contract is paused.
+     */
+    error EnforcedPause();
 
     /**
-     * @dev Initializes the contract in unpaused state.
+     * @dev The operation failed because the contract is not paused.
      */
-    constructor () internal {
-        _paused = false;
-    }
-
-    /**
-     * @dev Returns true if the contract is paused, and false otherwise.
-     */
-    function paused() public view returns (bool) {
-        return _paused;
-    }
+    error ExpectedPause();
 
     /**
      * @dev Modifier to make a function callable only when the contract is not paused.
@@ -48,7 +45,7 @@ contract Pausable is Context {
      * - The contract must not be paused.
      */
     modifier whenNotPaused() {
-        require(!_paused, "Pausable: paused");
+        _requireNotPaused();
         _;
     }
 
@@ -60,8 +57,33 @@ contract Pausable is Context {
      * - The contract must be paused.
      */
     modifier whenPaused() {
-        require(_paused, "Pausable: not paused");
+        _requirePaused();
         _;
+    }
+
+    /**
+     * @dev Returns true if the contract is paused, and false otherwise.
+     */
+    function paused() public view virtual returns (bool) {
+        return _paused;
+    }
+
+    /**
+     * @dev Throws if the contract is paused.
+     */
+    function _requireNotPaused() internal view virtual {
+        if (paused()) {
+            revert EnforcedPause();
+        }
+    }
+
+    /**
+     * @dev Throws if the contract is not paused.
+     */
+    function _requirePaused() internal view virtual {
+        if (!paused()) {
+            revert ExpectedPause();
+        }
     }
 
     /**

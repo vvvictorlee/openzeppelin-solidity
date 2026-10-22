@@ -1,19 +1,23 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.6.0;
+pragma solidity ^0.8.20;
 
-import "../utils/ReentrancyGuard.sol";
-import "./ReentrancyAttack.sol";
+import {ReentrancyGuard} from "../utils/ReentrancyGuard.sol";
+import {ReentrancyAttack} from "./ReentrancyAttack.sol";
 
 contract ReentrancyMock is ReentrancyGuard {
     uint256 public counter;
 
-    constructor () public {
+    constructor() {
         counter = 0;
     }
 
     function callback() external nonReentrant {
         _count();
+    }
+
+    function viewCallback() external view nonReentrantView returns (uint256) {
+        return counter;
     }
 
     function countLocalRecursive(uint256 n) public nonReentrant {
@@ -26,19 +30,30 @@ contract ReentrancyMock is ReentrancyGuard {
     function countThisRecursive(uint256 n) public nonReentrant {
         if (n > 0) {
             _count();
-            // solhint-disable-next-line avoid-low-level-calls
-            (bool success,) = address(this).call(abi.encodeWithSignature("countThisRecursive(uint256)", n - 1));
+            (bool success, ) = address(this).call(abi.encodeCall(this.countThisRecursive, (n - 1)));
             require(success, "ReentrancyMock: failed call");
         }
     }
 
     function countAndCall(ReentrancyAttack attacker) public nonReentrant {
         _count();
-        bytes4 func = bytes4(keccak256("callback()"));
-        attacker.callSender(func);
+        attacker.callSender(abi.encodeCall(this.callback, ()));
+    }
+
+    function countAndCallView(ReentrancyAttack attacker) public nonReentrant {
+        _count();
+        attacker.staticcallSender(abi.encodeCall(this.viewCallback, ()));
     }
 
     function _count() private {
         counter += 1;
+    }
+
+    function guardedCheckEntered() public nonReentrant {
+        require(_reentrancyGuardEntered());
+    }
+
+    function unguardedCheckNotEntered() public view {
+        require(!_reentrancyGuardEntered());
     }
 }

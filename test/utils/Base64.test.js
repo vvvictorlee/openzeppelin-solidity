@@ -1,0 +1,101 @@
+import { network } from 'hardhat';
+import { expect } from 'chai';
+
+const {
+  ethers,
+  networkHelpers: { loadFixture },
+} = await network.create();
+
+// Replace "+/" with "-_" in the char table, and remove the padding
+// see https://datatracker.ietf.org/doc/html/rfc4648#section-5
+const base64toBase64Url = str => str.replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+
+async function fixture() {
+  return { mock: await ethers.deployContract('$Base64') };
+}
+
+describe('Base64', function () {
+  beforeEach(async function () {
+    Object.assign(this, await loadFixture(fixture));
+  });
+
+  describe('base64', function () {
+    for (const { title, input, expected } of [
+      { title: 'converts to base64 encoded string with double padding', input: 'test', expected: 'dGVzdA==' },
+      { title: 'converts to base64 encoded string with single padding', input: 'test1', expected: 'dGVzdDE=' },
+      { title: 'converts to base64 encoded string without padding', input: 'test12', expected: 'dGVzdDEy' },
+      { title: 'converts to base64 encoded string (/ case)', input: 'où', expected: 'b/k=' },
+      { title: 'converts to base64 encoded string (+ case)', input: 'zs~1t8', expected: 'enN+MXQ4' },
+      { title: 'empty bytes', input: '', expected: '' },
+    ])
+      it(title, async function () {
+        const buffer = Buffer.from(input, 'ascii');
+        await expect(this.mock.$encode(buffer)).to.eventually.equal(ethers.encodeBase64(buffer));
+        await expect(this.mock.$encode(buffer)).to.eventually.equal(expected);
+        await expect(this.mock.$decode(expected)).to.eventually.equal(ethers.hexlify(buffer));
+      });
+  });
+
+  describe('base64url', function () {
+    for (const { title, input, expected } of [
+      { title: 'converts to base64url encoded string with double padding', input: 'test', expected: 'dGVzdA' },
+      { title: 'converts to base64url encoded string with single padding', input: 'test1', expected: 'dGVzdDE' },
+      { title: 'converts to base64url encoded string without padding', input: 'test12', expected: 'dGVzdDEy' },
+      { title: 'converts to base64url encoded string (_ case)', input: 'où', expected: 'b_k' },
+      { title: 'converts to base64url encoded string (- case)', input: 'zs~1t8', expected: 'enN-MXQ4' },
+      { title: 'empty bytes', input: '', expected: '' },
+    ])
+      it(title, async function () {
+        const buffer = Buffer.from(input, 'ascii');
+        await expect(this.mock.$encodeURL(buffer)).to.eventually.equal(base64toBase64Url(ethers.encodeBase64(buffer)));
+        await expect(this.mock.$encodeURL(buffer)).to.eventually.equal(expected);
+        await expect(this.mock.$decode(expected)).to.eventually.equal(ethers.hexlify(buffer));
+      });
+  });
+
+  it('Decode invalid base64 string', async function () {
+    const getHexCode = str => ethers.hexlify(ethers.toUtf8Bytes(str));
+    const helper = { interface: ethers.Interface.from(['error InvalidBase64Char(bytes1)']) };
+    // check that an invalid character is caught in each of the 4 positions of a chunk (a, b, c, d).
+    await expect(this.mock.$decode('TWFu')).to.eventually.equal(getHexCode('Man'));
+    for (const input of ['@WFu', 'T@Fu', 'TW@u', 'TWF@']) {
+      await expect(this.mock.$decode(input))
+        .to.be.revertedWithCustomError(helper, 'InvalidBase64Char')
+        .withArgs(getHexCode('@'));
+    }
+    // ord('*') < 43
+    await expect(this.mock.$decode('dGVzd*=='))
+      .to.be.revertedWithCustomError(helper, 'InvalidBase64Char')
+      .withArgs(getHexCode('*'));
+    // ord('{') > 122
+    await expect(this.mock.$decode('dGVzd{=='))
+      .to.be.revertedWithCustomError(helper, 'InvalidBase64Char')
+      .withArgs(getHexCode('{'));
+    // ord('@') in range, but '@' not in the dictionary
+    await expect(this.mock.$decode('dGVzd@=='))
+      .to.be.revertedWithCustomError(helper, 'InvalidBase64Char')
+      .withArgs(getHexCode('@'));
+    // null byte: reported as 0x00, which must not be confused with "no invalid character"
+    await expect(this.mock.$decode('dGVzd\x00=='))
+      .to.be.revertedWithCustomError(helper, 'InvalidBase64Char')
+      .withArgs(getHexCode('\x00'));
+  });
+
+  it('tryDecode returns a success flag instead of reverting', async function () {
+    await expect(this.mock.$tryDecode('TWFu')).to.eventually.deep.equal([true, ethers.hexlify(Buffer.from('Man'))]);
+    await expect(this.mock.$tryDecode('')).to.eventually.deep.equal([true, '0x']);
+
+    for (const input of ['@WFu', 'T@Fu', 'TW@u', 'TWF@', 'dGVzd*==', 'dGVzd{==', 'dGVzd@==', 'dGVzd\x00==']) {
+      await expect(this.mock.$tryDecode(input)).to.eventually.deep.equal([false, '0x']);
+    }
+  });
+
+  it('Encode reads beyond the input buffer into dirty memory', async function () {
+    const mock = await ethers.deployContract('Base64Dirty');
+    const buffer32 = ethers.id('example');
+    const buffer31 = buffer32.slice(0, -2);
+
+    await expect(mock.encode(buffer31)).to.eventually.equal(ethers.encodeBase64(buffer31));
+    await expect(mock.encode(buffer32)).to.eventually.equal(ethers.encodeBase64(buffer32));
+  });
+});

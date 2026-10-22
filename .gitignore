@@ -29,20 +29,15 @@ npm-debug.log
 # local env variables
 .env
 
-# truffle build directory
-build/
-
 # macOS
 .DS_Store
-
-# truffle
-.node-xmlhttprequest-*
 
 # IntelliJ IDE
 .idea
 
 # docs artifacts
 docs/modules/api
+build/site
 
 # only used to package @openzeppelin/contracts
 contracts/build/
@@ -50,3 +45,23 @@ contracts/README.md
 
 # temporary artifact from solidity-coverage
 allFiredEvents
+.coverage_artifacts
+.coverage_cache
+.coverage_contracts
+
+# hardat-exposed
+contracts-exposed
+
+# Hardhat
+/cache
+/artifacts
+
+# Foundry
+/out
+/cache_forge
+
+# Certora
+.certora*
+.last_confs
+certora_*
+.zip-output-url.txt

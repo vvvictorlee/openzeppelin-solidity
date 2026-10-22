@@ -2,11 +2,11 @@
 
 // This script removes the build artifacts of ignored contracts.
 
-const fs = require('fs');
-const path = require('path');
-const match = require('micromatch');
+import fs from 'fs';
+import path from 'path';
+import match from 'micromatch';
 
-function readJSON (path) {
+function readJSON(path) {
   return JSON.parse(fs.readFileSync(path));
 }
 
@@ -15,28 +15,30 @@ const pkgFiles = readJSON('package.json').files;
 // Get only negated patterns.
 const ignorePatterns = pkgFiles
   .filter(pat => pat.startsWith('!'))
-// Remove the negation part. Makes micromatch usage more intuitive.
+  // Remove the negation part. Makes micromatch usage more intuitive.
   .map(pat => pat.slice(1));
 
 const ignorePatternsSubtrees = ignorePatterns
-// Add **/* to ignore all files contained in the directories.
+  // Add **/* to ignore all files contained in the directories.
   .concat(ignorePatterns.map(pat => path.join(pat, '**/*')))
   .map(p => p.replace(/^\//, ''));
 
-const artifactsDir = 'build/contracts';
+const artifactsDir = 'contracts/build/contracts';
+const buildinfo = 'artifacts/build-info';
+const filenames = fs.readdirSync(buildinfo).filter(filename => match.isMatch(filename, '*.output.json'));
 
 let n = 0;
 
-for (const artifact of fs.readdirSync(artifactsDir)) {
-  const fullArtifactPath = path.join(artifactsDir, artifact);
-  const { sourcePath: fullSourcePath } = readJSON(fullArtifactPath);
-  const sourcePath = path.relative('.', fullSourcePath);
-
-  const ignore = match.any(sourcePath, ignorePatternsSubtrees);
-
-  if (ignore) {
-    fs.unlinkSync(fullArtifactPath);
-    n += 1;
+for (const filename of filenames) {
+  const solcOutput = readJSON(path.join(buildinfo, filename)).output;
+  for (const sourcePath in solcOutput.contracts) {
+    const ignore = match.any(sourcePath.replace(/^project\//, ''), ignorePatternsSubtrees);
+    if (ignore) {
+      for (const contract in solcOutput.contracts[sourcePath]) {
+        fs.unlinkSync(path.join(artifactsDir, contract + '.json'));
+        n += 1;
+      }
+    }
   }
 }
 
